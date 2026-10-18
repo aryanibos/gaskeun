@@ -359,10 +359,20 @@ export default function HeadReviewQueueScreen({
             </div>
 
             {/* Poster Preview */}
-            <PosterGraphic
-              theme={selectedItem.posterTheme}
-              typoFixed={selectedItem.posterTheme === 'hiring' ? typoFixed : true}
-            />
+            {selectedItem.imageUrl ? (
+              <div className="rounded-2xl overflow-hidden border border-[#E6ECF5] bg-[#F5F7FC] flex items-center justify-center">
+                <img
+                  src={selectedItem.imageUrl}
+                  alt={selectedItem.title}
+                  className="w-full max-h-[520px] object-contain"
+                />
+              </div>
+            ) : (
+              <PosterGraphic
+                theme={selectedItem.posterTheme}
+                typoFixed={selectedItem.posterTheme === 'hiring' ? typoFixed : true}
+              />
+            )}
 
             {/* AI Review Summary Panel */}
             <div className="gaskeun-ai-panel p-5 space-y-4">
@@ -372,7 +382,9 @@ export default function HeadReviewQueueScreen({
                   <div>
                     <h3 className="text-sm font-extrabold text-[#0B1F4D]">AI review summary</h3>
                     <p className="text-[11px] text-[#52607E]">
-                      Automated Brand Guardian &amp; copy risk evaluation
+                      {selectedItem.aiSource === 'gemini'
+                        ? 'Live Gemini Brand Guardian result for this submission'
+                        : 'Sample demo data (not AI-generated)'}
                     </p>
                   </div>
                 </div>
@@ -420,7 +432,7 @@ export default function HeadReviewQueueScreen({
               {/* Checks list */}
               <div className="space-y-1.5">
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#52607E]">
-                  Automated checks
+                  {selectedItem.aiSource === 'gemini' ? 'Brand Guardian findings' : 'Checks (sample)'}
                 </span>
                 <div className="grid grid-cols-1 gap-1.5">
                   {selectedItem.aiChecks.map((chk, idx) => (
@@ -428,7 +440,14 @@ export default function HeadReviewQueueScreen({
                       key={idx}
                       className="flex items-start gap-2 text-xs text-[#0B1F4D] bg-white/80 px-3 py-2 rounded-lg border border-[#D9E4FF]"
                     >
-                      <CheckCircle2 size={15} className="text-[#146C3C] shrink-0 mt-0.5" />
+                      <CheckCircle2
+                        size={15}
+                        className={`shrink-0 mt-0.5 ${
+                          selectedItem.aiIssues && selectedItem.aiIssues.length > 0
+                            ? 'text-[#D97706]'
+                            : 'text-[#146C3C]'
+                        }`}
+                      />
                       <span>{chk}</span>
                     </div>
                   ))}

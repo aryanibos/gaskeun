@@ -43,7 +43,7 @@ export interface QueueItem {
   designerColor: string;
   submittedAt: string;
   status: 'Submitted' | 'In review' | 'Revision';
-  riskLevel: 'LOW RISK' | 'MEDIUM RISK';
+  riskLevel: 'LOW RISK' | 'MEDIUM RISK' | 'HIGH RISK';
   riskScore: number; // e.g., 14 out of 100
   platforms: PlatformName[];
   type: ContentType;
@@ -57,6 +57,11 @@ export interface QueueItem {
     TikTok?: string;
   };
   revisionNote?: string;
+  /** Uploaded artwork (data URL) when the item came from a real upload. */
+  imageUrl?: string;
+  /** 'gemini' when the AI fields above came from a real Gemini Brand Guardian call. */
+  aiSource?: 'gemini' | 'sample';
+  aiIssues?: { type: string; text: string; suggestion: string; severity: 'low' | 'medium' | 'high' }[];
 }
 
 export interface PublishedPostItem {

@@ -131,7 +131,7 @@ export default function HeadCalendarScreen({
           <GeminiSparkleTile size="md" />
           <div>
             <p className="text-xs sm:text-sm font-extrabold text-[#0B1F4D]">
-              Gemini scheduling suggestion
+              Scheduling suggestion (sample, not AI)
             </p>
             <p className="text-xs text-[#52607E] mt-0.5">
               {suggestionApplied

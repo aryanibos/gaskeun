@@ -73,7 +73,7 @@ export default function HeadTeamScreen({ designers, onNavigate }: HeadTeamScreen
         <div className="flex items-start gap-3.5">
           <GeminiSparkleTile size="md" />
           <div>
-            <p className="text-sm font-extrabold text-[#0B1F4D]">Gemini weekly insight</p>
+            <p className="text-sm font-extrabold text-[#0B1F4D]">Weekly insight (sample data, not AI)</p>
             <p className="text-xs text-[#52607E] mt-0.5 leading-relaxed">
               First-pass approval rate climbed from <strong className="text-[#0B1F4D]">64% to 82%</strong> this week after Staff Designers enabled the Brand Guardian OCR check. <strong className="text-[#0B1F4D]">Rina Putri</strong> and <strong className="text-[#0B1F4D]">Sari Wulandari</strong> have the highest active queue; <strong className="text-[#0B1F4D]">Maya Anggraini</strong> and <strong className="text-[#0B1F4D]">Tomi Hartono</strong> have open capacity for upcoming 11.11 assets.
             </p>

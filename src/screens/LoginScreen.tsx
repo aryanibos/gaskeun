@@ -13,6 +13,7 @@ import {
 import { Role, ScreenId } from '../types';
 import { ROLE_PROFILES } from '../data/mockData';
 import { GaskeunLogo } from '../components/SharedUI';
+import { isAIConfigured } from '../lib/ai';
 
 interface LoginScreenProps {
   selectedRole: Role;
@@ -177,7 +178,8 @@ export default function LoginScreen({
         <div className="relative z-10 pt-8 flex flex-wrap items-center justify-between gap-4 text-xs text-white/65 border-t border-white/15 mt-8">
           <span>Customer workspace: Lumbung Studio</span>
           <span className="inline-flex items-center gap-1.5 text-[#BBFB52] font-semibold">
-            <CheckCircle2 size={14} /> Gemini 2.5 Brand Guardian active
+            <CheckCircle2 size={14} />{' '}
+            {isAIConfigured ? 'Gemini 2.5 Flash Brand Guardian enabled' : 'AI not configured (demo mode)'}
           </span>
         </div>
       </div>

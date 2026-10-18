@@ -120,7 +120,7 @@ export default function BrandGuidelinesScreen() {
         </div>
         <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#F2F6FF] border border-[#D9E4FF] text-xs font-extrabold text-[#1450E0] self-start">
           <CheckCircle2 size={15} />
-          <span>Synced with Gemini Brand Guardian</span>
+          <span>Default rules used by Brand Guardian live in src/config/brandRules.ts</span>
         </div>
       </div>
 
