@@ -23,6 +23,7 @@ import {
 import { Role, ScreenId } from '../types';
 import { ROLE_PROFILES } from '../data/mockData';
 import { GaskeunLogo } from './SharedUI';
+import { isAIConfigured } from '../lib/ai';
 
 interface NavItem {
   id: string;
@@ -349,11 +350,17 @@ export const LayoutShell: React.FC<LayoutShellProps> = ({
               >
                 <Sparkles size={13} />
               </div>
-              <span className="text-xs font-extrabold text-white">Gemini is on</span>
-              <span className="ml-auto w-2 h-2 rounded-full bg-[#BBFB52]" />
+              <span className="text-xs font-extrabold text-white">
+                {isAIConfigured ? 'Gemini is on' : 'AI not configured'}
+              </span>
+              <span
+                className={`ml-auto w-2 h-2 rounded-full ${isAIConfigured ? 'bg-[#BBFB52]' : 'bg-[#F59E0B]'}`}
+              />
             </div>
             <p className="text-[11px] leading-relaxed text-white/80">
-              Gemini is on – drafts captions, checks your brand rules and summarizes every submission
+              {isAIConfigured
+                ? 'Gemini drafts captions from your artwork and checks it against your brand rules'
+                : 'Add Firebase config (.env) to enable Gemini captions & Brand Guardian'}
             </p>
           </div>
 
@@ -495,7 +502,7 @@ export const LayoutShell: React.FC<LayoutShellProps> = ({
                           Rina Putri submitted &ldquo;We&apos;re hiring: UI/UX Designer&rdquo;
                         </p>
                         <p className="text-[11px] text-[#52607E] mt-0.5">
-                          Gemini pre-check: LOW RISK · 10 mins ago
+                          Sample notification · 10 mins ago
                         </p>
                       </div>
                       <div

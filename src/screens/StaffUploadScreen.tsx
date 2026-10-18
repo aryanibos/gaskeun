@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   RefreshCw,
   Plus,
@@ -10,24 +10,30 @@ import {
   FileImage,
   Video,
   Sparkles,
+  AlertTriangle,
+  Loader2,
 } from 'lucide-react';
+import { CaptionResult, UploadedImage, isAIConfigured, GEMINI_MODEL } from '../lib/ai';
 import { PlatformDraft, PlatformName, ScreenId } from '../types';
 import { GeminiSparkleTile, Instagram, Linkedin, PosterGraphic } from '../components/SharedUI';
 
 interface StaffUploadScreenProps {
   drafts: Record<PlatformName, PlatformDraft>;
   onUpdateDraft: (platform: PlatformName, updated: Partial<PlatformDraft>) => void;
-  onRegenerateDraft: (platform: PlatformName) => void;
+  onRegenerateDraft: () => Promise<boolean>;
   typoFixed: boolean;
+  uploadedImage: UploadedImage | null;
+  onSelectFile: (file: File) => void;
+  draftSource: 'sample' | 'gemini';
+  detected: CaptionResult['detected'] | null;
+  captionLoading: boolean;
+  captionError: string | null;
   onSaveDraft: () => void;
   onNavigate: (screen: ScreenId) => void;
 }
 
-const SAMPLE_FILES = [
-  { name: 'hiring-uiux-designer-v2.png', size: '2.4 MB', dims: '1080 × 1350 px (4:5)' },
-  { name: 'hiring-uiux-designer-alt.png', size: '2.1 MB', dims: '1080 × 1350 px (4:5)' },
-  { name: 'lumbung-career-post-oct.png', size: '2.6 MB', dims: '1080 × 1080 px (1:1)' },
-];
+const formatBytes = (n: number) =>
+  n > 1024 * 1024 ? `${(n / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
 
 export default function StaffUploadScreen({
   drafts,
@@ -36,16 +42,21 @@ export default function StaffUploadScreen({
   typoFixed,
   onSaveDraft,
   onNavigate,
+  uploadedImage,
+  onSelectFile,
+  draftSource,
+  detected,
+  captionLoading,
+  captionError,
 }: StaffUploadScreenProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [activePlatform, setActivePlatform] = useState<PlatformName>('Instagram');
   const [newHashtag, setNewHashtag] = useState('');
   const [showAddTagInput, setShowAddTagInput] = useState(false);
-  const [fileIndex, setFileIndex] = useState(0);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
-  const [isRegenerating, setIsRegenerating] = useState(false);
+  const isRegenerating = captionLoading;
 
   const currentDraft = drafts[activePlatform];
-  const currentFile = SAMPLE_FILES[fileIndex];
 
   const triggerToast = (msg: string) => {
     setToastMsg(msg);
@@ -53,18 +64,18 @@ export default function StaffUploadScreen({
   };
 
   const handleReplaceFile = () => {
-    const nextIdx = (fileIndex + 1) % SAMPLE_FILES.length;
-    setFileIndex(nextIdx);
-    triggerToast(`Replaced file with ${SAMPLE_FILES[nextIdx].name}`);
+    fileInputRef.current?.click();
   };
 
-  const handleRegenerate = () => {
-    setIsRegenerating(true);
-    setTimeout(() => {
-      onRegenerateDraft(activePlatform);
-      setIsRegenerating(false);
-      triggerToast(`Gemini regenerated ${activePlatform} draft`);
-    }, 320);
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) onSelectFile(file);
+    e.target.value = '';
+  };
+
+  const handleRegenerate = async () => {
+    const ok = await onRegenerateDraft();
+    if (ok) triggerToast('Gemini regenerated captions for Instagram, LinkedIn & TikTok');
   };
 
   const handleAddHashtag = (e: React.FormEvent) => {
@@ -171,8 +182,38 @@ export default function StaffUploadScreen({
             </span>
           </div>
 
-          {/* Yellow WE'RE HIRING – UI/UX Designer poster with typo "Aplly now" */}
-          <PosterGraphic theme="hiring" typoFixed={typoFixed} />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/heic,image/heif"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+          {uploadedImage ? (
+            <div className="rounded-2xl overflow-hidden border border-[#E6ECF5] bg-[#F5F7FC] flex items-center justify-center">
+              <img
+                src={uploadedImage.previewUrl}
+                alt={uploadedImage.name}
+                className="w-full max-h-[520px] object-contain"
+              />
+            </div>
+          ) : (
+            <div className="relative">
+              {/* Sample poster shown until the user uploads real artwork */}
+              <PosterGraphic theme="hiring" typoFixed={typoFixed} />
+              <button
+                type="button"
+                onClick={handleReplaceFile}
+                className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#0B1F4D]/55 text-white rounded-2xl cursor-pointer hover:bg-[#0B1F4D]/65 transition"
+              >
+                <Upload size={26} />
+                <span className="text-sm font-extrabold">Upload your artwork</span>
+                <span className="text-[11px] font-semibold opacity-90">
+                  PNG, JPG or WEBP · sample poster shown
+                </span>
+              </button>
+            </div>
+          )}
 
           {/* File info + Replace button */}
           <div className="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-[#F5F7FC] border border-[#E6ECF5]">
@@ -181,9 +222,15 @@ export default function StaffUploadScreen({
                 <FileImage size={18} />
               </div>
               <div className="min-w-0">
-                <p className="text-xs font-bold text-[#0B1F4D] truncate">{currentFile.name}</p>
+                <p className="text-xs font-bold text-[#0B1F4D] truncate">
+                  {uploadedImage ? uploadedImage.name : 'No file uploaded yet'}
+                </p>
                 <p className="text-[11px] text-[#52607E]">
-                  {currentFile.size} · {currentFile.dims}
+                  {uploadedImage
+                    ? `${formatBytes(uploadedImage.size)}${
+                        uploadedImage.width ? ` · ${uploadedImage.width} × ${uploadedImage.height} px` : ''
+                      }`
+                    : 'Sample artwork preview'}
                 </p>
               </div>
             </div>
@@ -194,50 +241,46 @@ export default function StaffUploadScreen({
               className="gaskeun-btn-secondary px-3.5 py-2 text-xs font-bold inline-flex items-center gap-1.5 shrink-0 cursor-pointer"
             >
               <Upload size={13} />
-              Replace
+              {uploadedImage ? 'Replace' : 'Upload'}
             </button>
           </div>
 
-          {/* AI Panel: Gemini detected: Hiring poster */}
+          {/* AI Panel: what Gemini detected in the uploaded artwork */}
           <div className="gaskeun-ai-panel p-4 space-y-3">
             <div className="flex items-center gap-2.5">
               <GeminiSparkleTile size="sm" />
               <div>
                 <p className="text-xs font-extrabold text-[#0B1F4D]">
-                  Gemini detected: Hiring poster
+                  {!isAIConfigured
+                    ? 'AI not configured'
+                    : captionLoading
+                      ? 'Gemini is analysing your artwork…'
+                      : detected
+                        ? `Gemini detected: ${detected.contentType}`
+                        : 'Upload artwork for Gemini analysis'}
                 </p>
                 <p className="text-[11px] text-[#52607E]">
-                  Extracted key fields from artwork OCR &amp; layout analysis
+                  {!isAIConfigured
+                    ? 'Set the VITE_FIREBASE_* env vars (see .env.example) to enable Gemini.'
+                    : detected
+                      ? detected.summary
+                      : `Uses ${GEMINI_MODEL} via Firebase AI Logic`}
                 </p>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2.5 pt-1">
-              <div className="bg-white rounded-xl p-2.5 border border-[#D9E4FF]">
-                <span className="block text-[10px] font-bold uppercase tracking-wider text-[#52607E]">
-                  Position
-                </span>
-                <span className="text-xs font-extrabold text-[#0B1F4D]">UI/UX Designer</span>
+            {detected && detected.keyFields.length > 0 && (
+              <div className="grid grid-cols-2 gap-2.5 pt-1">
+                {detected.keyFields.map((f) => (
+                  <div key={f.label} className="bg-white rounded-xl p-2.5 border border-[#D9E4FF]">
+                    <span className="block text-[10px] font-bold uppercase tracking-wider text-[#52607E]">
+                      {f.label}
+                    </span>
+                    <span className="text-xs font-extrabold text-[#0B1F4D]">{f.value}</span>
+                  </div>
+                ))}
               </div>
-              <div className="bg-white rounded-xl p-2.5 border border-[#D9E4FF]">
-                <span className="block text-[10px] font-bold uppercase tracking-wider text-[#52607E]">
-                  Experience
-                </span>
-                <span className="text-xs font-extrabold text-[#0B1F4D]">2+ years</span>
-              </div>
-              <div className="bg-white rounded-xl p-2.5 border border-[#D9E4FF]">
-                <span className="block text-[10px] font-bold uppercase tracking-wider text-[#52607E]">
-                  Location
-                </span>
-                <span className="text-xs font-extrabold text-[#0B1F4D]">[CITY]</span>
-              </div>
-              <div className="bg-white rounded-xl p-2.5 border border-[#D9E4FF]">
-                <span className="block text-[10px] font-bold uppercase tracking-wider text-[#52607E]">
-                  Deadline
-                </span>
-                <span className="text-xs font-extrabold text-[#0B1F4D]">[DEADLINE]</span>
-              </div>
-            </div>
+            )}
           </div>
         </div>
 
@@ -250,7 +293,9 @@ export default function StaffUploadScreen({
               <div>
                 <h2 className="text-base font-extrabold text-[#0B1F4D]">AI-drafted post</h2>
                 <p className="text-xs text-[#52607E]">
-                  Tailored per platform using Lumbung Studio voice rules
+                  {draftSource === 'gemini'
+                    ? `Generated by Gemini (${GEMINI_MODEL}) using Lumbung Studio voice rules`
+                    : 'Sample draft (not AI-generated) — upload artwork to generate with Gemini'}
                 </p>
               </div>
             </div>
@@ -258,12 +303,42 @@ export default function StaffUploadScreen({
             <button
               type="button"
               onClick={handleRegenerate}
-              className="gaskeun-btn-secondary px-3.5 py-2 text-xs font-bold inline-flex items-center gap-2 cursor-pointer"
+              disabled={captionLoading || !isAIConfigured || !uploadedImage}
+              title={
+                !isAIConfigured
+                  ? 'AI not configured'
+                  : !uploadedImage
+                    ? 'Upload artwork first'
+                    : 'Ask Gemini for a new variation'
+              }
+              className="disabled:opacity-40 gaskeun-btn-secondary px-3.5 py-2 text-xs font-bold inline-flex items-center gap-2 cursor-pointer"
             >
               <RefreshCw size={14} className={isRegenerating ? 'animate-spin text-[#1450E0]' : ''} />
               Regenerate
             </button>
           </div>
+
+          {!isAIConfigured && (
+            <div className="rounded-xl bg-[#FFF4D6] border border-[#D97706]/35 px-4 py-3 flex items-start gap-2 text-xs font-semibold text-[#7A5300]">
+              <AlertTriangle size={15} className="shrink-0 mt-0.5" />
+              <span>
+                AI not configured. Captions below are sample text, not Gemini output. Add your Firebase
+                config to <code>.env</code> (see README) to enable real Gemini generation.
+              </span>
+            </div>
+          )}
+          {captionLoading && (
+            <div className="rounded-xl bg-[#F2F6FF] border border-[#D9E4FF] px-4 py-3 flex items-center gap-2 text-xs font-bold text-[#1450E0]">
+              <Loader2 size={15} className="animate-spin" />
+              Gemini is writing captions for Instagram, LinkedIn &amp; TikTok…
+            </div>
+          )}
+          {captionError && (
+            <div className="rounded-xl bg-[#FDECEC] border border-[#991B1B]/25 px-4 py-3 flex items-start gap-2 text-xs font-semibold text-[#991B1B]">
+              <AlertTriangle size={15} className="shrink-0 mt-0.5" />
+              <span>{captionError}</span>
+            </div>
+          )}
 
           {/* Segmented Tabs: Instagram / LinkedIn / TikTok */}
           <div className="grid grid-cols-3 gap-1.5 p-1.5 rounded-2xl bg-[#F5F7FC] border border-[#E6ECF5]">

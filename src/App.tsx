@@ -13,7 +13,6 @@ import {
   TeamDesignerItem,
 } from './types';
 import {
-  ALTERNATE_AI_DRAFTS,
   INITIAL_ACTIVITY_LOG,
   INITIAL_AI_DRAFTS,
   INITIAL_CALENDAR_POSTS,
@@ -24,6 +23,15 @@ import {
   INITIAL_USERS_LIST,
   ROLE_PROFILES,
 } from './data/mockData';
+import {
+  BrandCheckResult,
+  CaptionResult,
+  UploadedImage,
+  checkBrand,
+  describeAIError,
+  generateCaptions,
+  readImageFile,
+} from './lib/ai';
 import { LayoutShell } from './components/LayoutShell';
 import LoginScreen from './screens/LoginScreen';
 import StaffUploadScreen from './screens/StaffUploadScreen';
@@ -46,11 +54,15 @@ export default function App() {
 
   // Screen 2 & 3 State (Staff Upload & Platforms)
   const [drafts, setDrafts] = useState<Record<PlatformName, PlatformDraft>>(INITIAL_AI_DRAFTS);
-  const [useAltDraft, setUseAltDraft] = useState<Record<PlatformName, boolean>>({
-    Instagram: false,
-    LinkedIn: false,
-    TikTok: false,
-  });
+  // Real AI state (Gemini via Firebase AI Logic)
+  const [uploadedImage, setUploadedImage] = useState<UploadedImage | null>(null);
+  const [draftSource, setDraftSource] = useState<'sample' | 'gemini'>('sample');
+  const [detected, setDetected] = useState<CaptionResult['detected'] | null>(null);
+  const [captionLoading, setCaptionLoading] = useState(false);
+  const [captionError, setCaptionError] = useState<string | null>(null);
+  const [brandCheck, setBrandCheck] = useState<BrandCheckResult | null>(null);
+  const [brandLoading, setBrandLoading] = useState(false);
+  const [brandError, setBrandError] = useState<string | null>(null);
   const [typoFixed, setTypoFixed] = useState(false);
   const [selectedPlatforms, setSelectedPlatforms] = useState<PlatformName[]>([
     'Instagram',
@@ -121,14 +133,72 @@ export default function App() {
     }));
   };
 
-  const handleRegenerateDraft = (platform: PlatformName) => {
-    const nextUseAlt = !useAltDraft[platform];
-    setUseAltDraft((prev) => ({ ...prev, [platform]: nextUseAlt }));
-    const source = nextUseAlt ? ALTERNATE_AI_DRAFTS[platform] : INITIAL_AI_DRAFTS[platform];
-    setDrafts((prev) => ({
-      ...prev,
-      [platform]: { ...source },
-    }));
+  const runGenerateCaptions = async (image: UploadedImage, isRegenerate: boolean) => {
+    setCaptionLoading(true);
+    setCaptionError(null);
+    try {
+      const result = await generateCaptions(image, {
+        previous: isRegenerate
+          ? (['Instagram', 'LinkedIn', 'TikTok'] as PlatformName[]).map((p) => drafts[p].caption)
+          : undefined,
+      });
+      setDetected(result.detected);
+      setDrafts((prev) => {
+        const next = { ...prev };
+        (['Instagram', 'LinkedIn', 'TikTok'] as PlatformName[]).forEach((p) => {
+          next[p] = { ...prev[p], ...result.platforms[p], tone: result.platforms[p].tone || prev[p].tone };
+        });
+        return next;
+      });
+      setDraftSource('gemini');
+      setBrandCheck(null); // captions changed -> previous check is stale
+      return true;
+    } catch (err) {
+      setCaptionError(describeAIError(err));
+      return false;
+    } finally {
+      setCaptionLoading(false);
+    }
+  };
+
+  const handleSelectFile = async (file: File) => {
+    setCaptionError(null);
+    try {
+      const img = await readImageFile(file);
+      setUploadedImage(img);
+      setDetected(null);
+      setBrandCheck(null);
+      await runGenerateCaptions(img, false);
+    } catch (err) {
+      setCaptionError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const handleRegenerateDraft = async () => {
+    if (!uploadedImage) {
+      setCaptionError('Upload an artwork image first so Gemini can generate captions.');
+      return false;
+    }
+    return runGenerateCaptions(uploadedImage, true);
+  };
+
+  const handleRunBrandCheck = async () => {
+    setBrandLoading(true);
+    setBrandError(null);
+    try {
+      const captions: Partial<Record<PlatformName, string>> = {};
+      (selectedPlatforms.length ? selectedPlatforms : (['Instagram', 'LinkedIn', 'TikTok'] as PlatformName[])).forEach(
+        (p) => {
+          captions[p] = `${drafts[p].caption}\n${drafts[p].hashtags.join(' ')}`;
+        }
+      );
+      const res = await checkBrand(uploadedImage, captions);
+      setBrandCheck(res);
+    } catch (err) {
+      setBrandError(describeAIError(err));
+    } finally {
+      setBrandLoading(false);
+    }
   };
 
   const handleTogglePlatform = (plat: PlatformName) => {
@@ -152,6 +222,33 @@ export default function App() {
                 TikTok: drafts.TikTok.caption,
               },
               revisionNote: note || undefined,
+              ...(uploadedImage
+                ? {
+                    title: drafts.Instagram.title || item.title,
+                    imageUrl: uploadedImage.previewUrl,
+                    type: 'Poster' as const,
+                  }
+                : {}),
+              ...(brandCheck
+                ? {
+                    aiSource: 'gemini' as const,
+                    riskScore: brandCheck.riskScore,
+                    riskLevel:
+                      brandCheck.riskScore < 25
+                        ? ('LOW RISK' as const)
+                        : brandCheck.riskScore < 60
+                          ? ('MEDIUM RISK' as const)
+                          : ('HIGH RISK' as const),
+                    aiWhatItIs: [detected?.contentType, detected?.summary || brandCheck.summary]
+                      .filter(Boolean)
+                      .join(' — '),
+                    aiChecks: brandCheck.issues.length
+                      ? brandCheck.issues.map((i) => `[${i.severity.toUpperCase()}] ${i.text} → ${i.suggestion}`)
+                      : ['No brand-rule issues found by Gemini Brand Guardian'],
+                    aiIssues: brandCheck.issues,
+                    aiRecommendation: `Gemini: ${brandCheck.summary}`,
+                  }
+                : { aiSource: 'sample' as const }),
             }
           : item
       )
@@ -291,6 +388,12 @@ export default function App() {
           onUpdateDraft={handleUpdateDraft}
           onRegenerateDraft={handleRegenerateDraft}
           typoFixed={typoFixed}
+          uploadedImage={uploadedImage}
+          onSelectFile={handleSelectFile}
+          draftSource={draftSource}
+          detected={detected}
+          captionLoading={captionLoading}
+          captionError={captionError}
           onSaveDraft={() => {
             setStaffSubmissions((prev) => [...prev]);
           }}
@@ -304,6 +407,11 @@ export default function App() {
           onTogglePlatform={handleTogglePlatform}
           typoFixed={typoFixed}
           onFixTypo={() => setTypoFixed(true)}
+          uploadedImage={uploadedImage}
+          brandCheck={brandCheck}
+          brandLoading={brandLoading}
+          brandError={brandError}
+          onRunBrandCheck={handleRunBrandCheck}
           onSubmitForApproval={handleSubmitForApproval}
           onNavigate={handleNavigate}
           onSelectRole={setCurrentRole}

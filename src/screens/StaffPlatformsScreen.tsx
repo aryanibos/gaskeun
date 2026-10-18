@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Video,
   CheckCircle2,
@@ -9,8 +9,11 @@ import {
   ArrowLeft,
   Sparkles,
   ShieldCheck,
-  Wrench,
+  Loader2,
+  RefreshCw,
 } from 'lucide-react';
+import { BrandCheckResult, UploadedImage, isAIConfigured, GEMINI_MODEL } from '../lib/ai';
+import { DEFAULT_BRAND_RULES } from '../config/brandRules';
 import { PlatformName, Role, ScreenId } from '../types';
 import { GeminiSparkleTile, Instagram, Linkedin, PosterGraphic } from '../components/SharedUI';
 
@@ -19,6 +22,11 @@ interface StaffPlatformsScreenProps {
   onTogglePlatform: (plat: PlatformName) => void;
   typoFixed: boolean;
   onFixTypo: () => void;
+  uploadedImage: UploadedImage | null;
+  brandCheck: BrandCheckResult | null;
+  brandLoading: boolean;
+  brandError: string | null;
+  onRunBrandCheck: () => void;
   onSubmitForApproval: (note: string, timing: 'immediate' | 'schedule') => void;
   onNavigate: (screen: ScreenId) => void;
   onSelectRole: (role: Role) => void;
@@ -28,11 +36,28 @@ export default function StaffPlatformsScreen({
   selectedPlatforms,
   onTogglePlatform,
   typoFixed,
-  onFixTypo,
+  uploadedImage,
+  brandCheck,
+  brandLoading,
+  brandError,
+  onRunBrandCheck,
   onSubmitForApproval,
   onNavigate,
   onSelectRole,
 }: StaffPlatformsScreenProps) {
+  // Auto-run Brand Guardian once when arriving with an uploaded image and no result yet.
+  useEffect(() => {
+    if (isAIConfigured && uploadedImage && !brandCheck && !brandLoading && !brandError) {
+      onRunBrandCheck();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uploadedImage]);
+
+  const severityStyle = {
+    high: 'bg-[#FDECEC] text-[#991B1B]',
+    medium: 'bg-[#FFF4D6] text-[#7A5300]',
+    low: 'bg-[#EEF2F9] text-[#0B1F4D]',
+  } as const;
   const [timing, setTiming] = useState<'immediate' | 'schedule'>('immediate');
   const [scheduleDate, setScheduleDate] = useState('2026-10-15T19:00');
   const [reviewerNote, setReviewerNote] = useState(
@@ -139,7 +164,7 @@ export default function StaffPlatformsScreen({
                 Submitted to Bima Santoso (Head Designer)!
               </p>
               <p className="text-xs text-[#52607E]">
-                &ldquo;We&apos;re hiring: UI/UX Designer&rdquo; is now at the top of the Head Review Queue.
+                Your submission is now at the top of the Head Review Queue.
               </p>
             </div>
           </div>
@@ -274,9 +299,9 @@ export default function StaffPlatformsScreen({
                   </div>
                   {timing === 'schedule' && <CheckCircle2 size={17} className="text-[#1450E0]" />}
                 </div>
-                <p className="text-sm font-extrabold text-[#0B1F4D]">Schedule with Gemini suggestion</p>
+                <p className="text-sm font-extrabold text-[#0B1F4D]">Schedule for a specific time</p>
                 <p className="text-xs text-[#52607E] mt-0.5">
-                  Queue for optimal weekday designer peak window
+                  Queue the post for a date &amp; time you choose
                 </p>
               </button>
             </div>
@@ -287,10 +312,10 @@ export default function StaffPlatformsScreen({
                 <GeminiSparkleTile size="sm" />
                 <div>
                   <p className="text-xs font-extrabold text-[#0B1F4D]">
-                    Gemini time suggestion: Thu, 15 Oct 2026 at 19:00 WIB
+                    Suggested time: Thu, 15 Oct 2026 at 19:00 WIB
                   </p>
                   <p className="text-[11px] text-[#52607E]">
-                    Based on Lumbung Studio&apos;s last 30 hiring &amp; portfolio posts (+28% reach on Thursday evenings)
+                    Static demo suggestion (not AI). Gemini-based scheduling from post analytics is on the roadmap.
                   </p>
                 </div>
               </div>
@@ -305,115 +330,111 @@ export default function StaffPlatformsScreen({
             </div>
           </div>
 
-          {/* 3. Brand Guardian Checklist (1 FIX: typo "Aplly" -> "Apply", 3 PASS) */}
+          {/* 3. Brand Guardian (real Gemini check) */}
           <div className="gaskeun-card p-6 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2.5">
                 <GeminiSparkleTile size="md" />
                 <div>
-                  <h2 className="text-base font-extrabold text-[#0B1F4D]">
-                    Brand Guardian checklist
-                  </h2>
+                  <h2 className="text-base font-extrabold text-[#0B1F4D]">Brand Guardian check</h2>
                   <p className="text-xs text-[#52607E]">
-                    Automated pre-check against Lumbung Studio brand rules
+                    Gemini ({GEMINI_MODEL}) checks artwork + captions against {DEFAULT_BRAND_RULES.brandName} brand rules
                   </p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
-                {!typoFixed && (
-                  <span className="px-2.5 py-1 rounded-full bg-[#FFF4D6] text-[#7A5300] text-xs font-extrabold">
-                    1 FIX
+                {brandCheck && (
+                  <span
+                    className={`px-2.5 py-1 rounded-full text-xs font-extrabold ${
+                      brandCheck.riskScore < 25
+                        ? 'bg-[#E5F5EC] text-[#146C3C]'
+                        : brandCheck.riskScore < 60
+                          ? 'bg-[#FFF4D6] text-[#7A5300]'
+                          : 'bg-[#FDECEC] text-[#991B1B]'
+                    }`}
+                  >
+                    Risk {brandCheck.riskScore}/100 · {brandCheck.issues.length} issue
+                    {brandCheck.issues.length === 1 ? '' : 's'}
                   </span>
                 )}
-                <span className="px-2.5 py-1 rounded-full bg-[#E5F5EC] text-[#146C3C] text-xs font-extrabold">
-                  {typoFixed ? '4 PASS' : '3 PASS'}
-                </span>
-              </div>
-            </div>
-
-            <div className="space-y-2.5">
-              {/* Item 1: Typo "Aplly" -> "Apply" */}
-              <div
-                className={`p-4 rounded-xl border flex flex-wrap items-center justify-between gap-3 ${
-                  typoFixed
-                    ? 'bg-[#F5F7FC] border-[#E6ECF5]'
-                    : 'bg-[#FFF4D6]/45 border-[#D97706]/35'
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  {typoFixed ? (
-                    <CheckCircle2 size={18} className="text-[#146C3C] shrink-0 mt-0.5" />
-                  ) : (
-                    <AlertTriangle size={18} className="text-[#7A5300] shrink-0 mt-0.5" />
-                  )}
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
-                          typoFixed
-                            ? 'bg-[#E5F5EC] text-[#146C3C]'
-                            : 'bg-[#FFF4D6] text-[#7A5300]'
-                        }`}
-                      >
-                        {typoFixed ? 'PASS' : 'FIX'}
-                      </span>
-                      <p className="text-xs font-extrabold text-[#0B1F4D]">
-                        Spelling &amp; CTA check: typo &ldquo;Aplly&rdquo; → &ldquo;Apply&rdquo;
-                      </p>
-                    </div>
-                    <p className="text-xs text-[#52607E] mt-1">
-                      {typoFixed
-                        ? 'Fixed! CTA button text now reads "Apply now" cleanly.'
-                        : 'Detected "Aplly now" on bottom-left CTA button. Apply 1-click correction before submitting.'}
-                    </p>
-                  </div>
-                </div>
-
-                {!typoFixed && (
-                  <button
-                    type="button"
-                    onClick={onFixTypo}
-                    className="min-h-[40px] px-3.5 py-1.5 rounded-xl bg-[#0B1F4D] hover:bg-[#1450E0] text-white text-xs font-bold inline-flex items-center gap-1.5 transition cursor-pointer"
-                  >
-                    <Wrench size={13} />
-                    Fix &ldquo;Aplly&rdquo; → &ldquo;Apply&rdquo;
-                  </button>
-                )}
-              </div>
-
-              {/* 3 PASS Items */}
-              {[
-                {
-                  title: 'Logo placement & safe zone',
-                  desc: 'Lumbung Studio wordmark verified in top-right corner with >24px clear margin.',
-                },
-                {
-                  title: 'Brand color palette compliance',
-                  desc: 'Artwork uses approved Sun #FFE14D, Ink #1F1A2E, Berry #F0307A, and Paper #FFFFFF.',
-                },
-                {
-                  title: 'Caption length & hashtag policy',
-                  desc: 'Instagram (278 chars, 6 hashtags) and LinkedIn (342 chars, 5 hashtags) pass guidelines.',
-                },
-              ].map((item) => (
-                <div
-                  key={item.title}
-                  className="p-3.5 rounded-xl bg-[#F5F7FC] border border-[#E6ECF5] flex items-start gap-3"
+                <button
+                  type="button"
+                  onClick={onRunBrandCheck}
+                  disabled={!isAIConfigured || brandLoading}
+                  className="gaskeun-btn-secondary px-3.5 py-2 text-xs font-bold inline-flex items-center gap-2 cursor-pointer disabled:opacity-40"
                 >
-                  <CheckCircle2 size={18} className="text-[#146C3C] shrink-0 mt-0.5" />
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded bg-[#E5F5EC] text-[#146C3C] text-[10px] font-extrabold uppercase">
-                        PASS
-                      </span>
-                      <p className="text-xs font-extrabold text-[#0B1F4D]">{item.title}</p>
-                    </div>
-                    <p className="text-xs text-[#52607E] mt-0.5">{item.desc}</p>
-                  </div>
-                </div>
-              ))}
+                  {brandLoading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                  {brandCheck ? 'Re-check' : 'Run check'}
+                </button>
+              </div>
             </div>
+
+            {!isAIConfigured && (
+              <div className="p-4 rounded-xl bg-[#FFF4D6]/60 border border-[#D97706]/35 flex items-start gap-3 text-xs text-[#7A5300] font-semibold">
+                <AlertTriangle size={17} className="shrink-0" />
+                AI not configured — Brand Guardian is unavailable. Add the Firebase config to .env (see README).
+              </div>
+            )}
+            {isAIConfigured && !uploadedImage && !brandCheck && !brandLoading && (
+              <div className="p-4 rounded-xl bg-[#F5F7FC] border border-[#E6ECF5] text-xs text-[#52607E]">
+                No artwork uploaded — upload an image in step 1 for a full visual check, or run the check on captions only.
+              </div>
+            )}
+            {brandLoading && (
+              <div className="p-4 rounded-xl bg-[#F2F6FF] border border-[#D9E4FF] flex items-center gap-2 text-xs font-bold text-[#1450E0]">
+                <Loader2 size={15} className="animate-spin" />
+                Gemini Brand Guardian is reviewing your artwork and captions…
+              </div>
+            )}
+            {brandError && (
+              <div className="p-4 rounded-xl bg-[#FDECEC] border border-[#991B1B]/25 flex items-start gap-2 text-xs font-semibold text-[#991B1B]">
+                <AlertTriangle size={15} className="shrink-0 mt-0.5" />
+                {brandError}
+              </div>
+            )}
+
+            {brandCheck && !brandLoading && (
+              <div className="space-y-2.5">
+                <p className="text-xs text-[#0B1F4D] font-semibold bg-[#F2F6FF] border border-[#D9E4FF] rounded-xl p-3.5">
+                  {brandCheck.summary}
+                </p>
+                {brandCheck.issues.length === 0 ? (
+                  <div className="p-3.5 rounded-xl bg-[#E5F5EC] border border-[#146C3C]/20 flex items-center gap-3 text-xs font-bold text-[#146C3C]">
+                    <CheckCircle2 size={18} /> No brand-rule issues found.
+                  </div>
+                ) : (
+                  brandCheck.issues.map((issue, idx) => (
+                    <div
+                      key={idx}
+                      className="p-4 rounded-xl border bg-[#FFF4D6]/30 border-[#D97706]/25 flex items-start gap-3"
+                    >
+                      <AlertTriangle size={18} className="text-[#7A5300] shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${severityStyle[issue.severity]}`}
+                          >
+                            {issue.severity}
+                          </span>
+                          <span className="px-2 py-0.5 rounded bg-[#EEF2F9] text-[#52607E] text-[10px] font-extrabold uppercase">
+                            {issue.type.replace('_', ' ')}
+                          </span>
+                          <p className="text-xs font-extrabold text-[#0B1F4D]">{issue.text}</p>
+                        </div>
+                        <p className="text-xs text-[#52607E] mt-1">
+                          <strong>Suggestion:</strong> {issue.suggestion}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+                <p className="text-[11px] text-[#52607E]">
+                  Checked {new Date(brandCheck.checkedAt).toLocaleTimeString()} by {brandCheck.model}. Edit captions in
+                  step 1 and re-check if needed.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -422,12 +443,20 @@ export default function StaffPlatformsScreen({
           <div className="flex items-center justify-between">
             <h2 className="text-base font-extrabold text-[#0B1F4D]">Submission summary</h2>
             <span className="text-[11px] font-bold text-[#146C3C] bg-[#E5F5EC] px-2.5 py-0.5 rounded-full">
-              Ready
+              {brandCheck ? 'Checked' : 'Ready'}
             </span>
           </div>
 
           {/* Thumbnail */}
-          <PosterGraphic theme="hiring" typoFixed={typoFixed} compact />
+          {uploadedImage ? (
+            <img
+              src={uploadedImage.previewUrl}
+              alt={uploadedImage.name}
+              className="w-full max-h-64 object-contain rounded-xl border border-[#E6ECF5] bg-[#F5F7FC]"
+            />
+          ) : (
+            <PosterGraphic theme="hiring" typoFixed={typoFixed} compact />
+          )}
 
           {/* Live-updated Selected Platforms */}
           <div className="space-y-1.5">
