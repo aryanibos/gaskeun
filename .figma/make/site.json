@@ -1,0 +1,10 @@
+{
+  "description": "Streamlines content approval and auto-publishing for in-house design teams with AI-driven drafting, brand checks, review workflows, and multi-platform posting.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
